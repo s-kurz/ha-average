@@ -1,4 +1,5 @@
 """Constants for tests."""
+
 from __future__ import annotations
 
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN

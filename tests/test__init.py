@@ -1,14 +1,16 @@
 """The test for the average integration."""
+
 # pylint: disable=redefined-outer-name
 from __future__ import annotations
 
 from unittest.mock import patch
 
-from custom_components.average.const import DOMAIN
 from homeassistant import config as hass_config
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.const import SERVICE_RELOAD
 from homeassistant.setup import async_setup_component
+
+from custom_components.average.const import DOMAIN
 
 from . import get_fixture_path
 from .const import MOCK_CONFIG, TEST_NAME

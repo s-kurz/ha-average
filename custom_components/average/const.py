@@ -1,4 +1,5 @@
-"""The Average Sensor.
+"""
+The Average Sensor.
 
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-average/
@@ -7,9 +8,9 @@ https://github.com/Limych/ha-average/
 from datetime import timedelta
 from typing import Final
 
-# Base component constants
 from homeassistant.const import Platform
 
+# Base component constants
 NAME: Final = "Average Sensor"
 DOMAIN: Final = "average"
 VERSION: Final = "2.3.5-alpha"

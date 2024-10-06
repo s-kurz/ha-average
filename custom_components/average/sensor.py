@@ -2,25 +2,31 @@
 #  Creative Commons BY-NC-SA 4.0 International Public License
 #  (see LICENSE.md or https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-"""The Average Sensor.
+"""
+The Average Sensor.
 
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-average/
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
-import datetime
 import logging
 import math
 import numbers
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from _sha1 import sha1
+from homeassistant.helpers.group import expand_entity_ids
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+
+import homeassistant.util.dt as dt_util
 import voluptuous as vol
-
+from _sha1 import sha1
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
-from homeassistant.components.group import expand_entity_ids
 from homeassistant.components.recorder import get_instance, history
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -42,7 +48,6 @@ from homeassistant.const import (
 )
 from homeassistant.core import (
     Event,
-    EventStateChangedData,
     HomeAssistant,
     State,
     callback,
@@ -53,7 +58,6 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.config_validation import PLATFORM_SCHEMA
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import Throttle
-import homeassistant.util.dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 from homeassistant.util.unit_system import TEMPERATURE_UNITS
 
@@ -81,10 +85,10 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def check_period_keys(conf):
+def check_period_keys(conf: ConfigType) -> ConfigType:
     """Ensure maximum 2 of CONF_PERIOD_KEYS are provided."""
     count = sum(param in conf for param in CONF_PERIOD_KEYS)
-    if (count == 1 and CONF_DURATION not in conf) or count > 2:
+    if (count == 1 and CONF_DURATION not in conf) or count > 2:  # noqa: PLR2004
         raise vol.Invalid(
             "You must provide none, only "
             + CONF_DURATION
@@ -113,31 +117,13 @@ PLATFORM_SCHEMA = vol.All(
 
 # pylint: disable=unused-argument
 async def async_setup_platform(
-    hass: HomeAssistant, config, async_add_entities, discovery_info=None
-):
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,  # noqa: ARG001
+) -> None:
     """Set up platform."""
-    start = config.get(CONF_START)
-    end = config.get(CONF_END)
-
-    for template in [start, end]:
-        if template is not None:
-            template.hass = hass
-
-    async_add_entities(
-        [
-            AverageSensor(
-                hass,
-                config.get(CONF_UNIQUE_ID),
-                config.get(CONF_NAME),
-                start,
-                end,
-                config.get(CONF_DURATION),
-                config.get(CONF_ENTITIES),
-                config.get(CONF_PRECISION),
-                config.get(CONF_PROCESS_UNDEF_AS),
-            )
-        ]
-    )
+    async_add_entities([AverageSensor(hass, config)])
 
 
 # pylint: disable=too-many-instance-attributes
@@ -158,36 +144,35 @@ class AverageSensor(SensorEntity):
     )
 
     # pylint: disable=too-many-arguments
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        unique_id: str | None,
-        name: str,
-        start,
-        end,
-        duration,
-        entity_ids: list,
-        precision: int,
-        undef,
-    ):
+    def __init__(self, hass: HomeAssistant, config: ConfigType) -> None:
         """Initialize the sensor."""
+        unique_id = config.get(CONF_UNIQUE_ID)
+        start = config.get(CONF_START)
+        end = config.get(CONF_END)
+        duration = config.get(CONF_DURATION)
+
+        for template in [start, end]:
+            if template is not None:
+                template.hass = hass
+
         self._start_template = start
         self._end_template = end
         self._duration = duration
         self._period = self.start = self.end = None
-        self._precision = precision
-        self._undef = undef
+        self._precision = config.get(CONF_PRECISION, DEFAULT_PRECISION)
+        self._undef = config.get(CONF_PROCESS_UNDEF_AS)
         self._temperature_mode = None
         self._actual_end = None
 
-        self.sources = expand_entity_ids(hass, entity_ids)
+        self.hass = hass
+        self.sources = expand_entity_ids(hass, config.get(CONF_ENTITIES, []))
         self.count_sources = len(self.sources)
         self.available_sources = 0
         self.count = 0
         self.trending_towards = None
         self.min_value = self.max_value = None
 
-        self._attr_name = name
+        self._attr_name = config.get(CONF_NAME, DEFAULT_NAME)
         self._attr_native_value = None
         self._attr_native_unit_of_measurement = None
         self._attr_icon = None
@@ -228,33 +213,30 @@ class AverageSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
         """Return entity specific state attributes."""
-        state_attr = {
+        return {
             attr: getattr(self, attr)
             for attr in ATTR_TO_PROPERTY
             if getattr(self, attr) is not None
         }
-        return state_attr
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
 
         # pylint: disable=unused-argument
         @callback
-        async def async_sensor_state_listener(
-            event: Event[EventStateChangedData],
-        ) -> None:
+        async def async_sensor_state_listener(event: Event) -> None:  # noqa: ARG001
             """Handle device state changes."""
             last_state = self._attr_native_value
             await self._async_update_state()
             if last_state != self._attr_native_value:
-                self.async_schedule_update_ha_state(True)
+                self.async_schedule_update_ha_state(force_refresh=True)
 
         # pylint: disable=unused-argument
         @callback
-        async def async_sensor_startup(event):
+        async def async_sensor_startup(event: Event) -> None:  # noqa: ARG001
             """Update template on startup."""
             if self._has_period:
-                self.async_schedule_update_ha_state(True)
+                self.async_schedule_update_ha_state(force_refresh=True)
             else:
                 async_track_state_change_event(
                     self.hass, self.sources, async_sensor_state_listener
@@ -264,7 +246,7 @@ class AverageSensor(SensorEntity):
         self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, async_sensor_startup)
 
     @staticmethod
-    def _has_state(state) -> bool:
+    def _has_state(state: str | None) -> bool:
         """Return True if state has any value."""
         return state is not None and state not in [
             STATE_UNKNOWN,
@@ -294,8 +276,8 @@ class AverageSensor(SensorEntity):
             temperature = TemperatureConverter.convert(
                 float(temperature), entity_unit, ha_unit
             )
-        except ValueError as exc:
-            _LOGGER.error('Could not convert value "%s" to float: %s', state, exc)
+        except ValueError:
+            _LOGGER.exception('Could not convert value "%s" to float', state)
             return None
 
         return temperature
@@ -308,8 +290,8 @@ class AverageSensor(SensorEntity):
 
         try:
             state = float(state)
-        except ValueError as exc:
-            _LOGGER.error('Could not convert value "%s" to float: %s', state, exc)
+        except ValueError:
+            _LOGGER.exception('Could not convert value "%s" to float', state)
             return None
 
         self.count += 1
@@ -322,13 +304,13 @@ class AverageSensor(SensorEntity):
         return state
 
     @Throttle(UPDATE_MIN_TIME)
-    async def async_update(self):
+    async def async_update(self) -> None:
         """Update the sensor state if it needed."""
         if self._has_period:
             await self._async_update_state()
 
     @staticmethod
-    def handle_template_exception(exc, field):
+    def handle_template_exception(exc: Exception, field: str) -> None:
         """Log an error nicely if the template cannot be interpreted."""
         if exc.args and exc.args[0].startswith(
             "UndefinedError: 'None' has no attribute"
@@ -337,9 +319,9 @@ class AverageSensor(SensorEntity):
             _LOGGER.warning(exc)
 
         else:
-            _LOGGER.error('Error parsing template for field "%s": %s', field, exc)
+            _LOGGER.exception('Error parsing template for field "%s": %s', field, exc)
 
-    async def _async_update_period(self):  # pylint: disable=too-many-branches
+    async def _async_update_period(self) -> None:  # noqa: PLR0912
         """Parse the templates and calculate a datetime tuples."""
         start = end = None
         now = dt_util.now()
@@ -360,7 +342,7 @@ class AverageSensor(SensorEntity):
                         dt_util.utc_from_timestamp(math.floor(float(start_rendered)))
                     )
                 except ValueError:
-                    _LOGGER.error(
+                    _LOGGER.exception(
                         'Parsing error: field "start" must be a datetime or a timestamp'
                     )
                     return
@@ -381,7 +363,7 @@ class AverageSensor(SensorEntity):
                         dt_util.utc_from_timestamp(math.floor(float(end_rendered)))
                     )
                 except ValueError:
-                    _LOGGER.error(
+                    _LOGGER.exception(
                         'Parsing error: field "end" must be a datetime or a timestamp'
                     )
                     return
@@ -414,7 +396,7 @@ class AverageSensor(SensorEntity):
         self.start = start.replace(microsecond=0).isoformat()
         self.end = end.replace(microsecond=0).isoformat()
 
-    def _init_mode(self, state: State):
+    def _init_mode(self, state: State) -> None:
         """Initialize sensor mode."""
         if self._temperature_mode is not None:
             return
@@ -439,9 +421,7 @@ class AverageSensor(SensorEntity):
             _LOGGER.debug("%s is NOT a temperature entity.", state.entity_id)
             self._attr_icon = state.attributes.get(ATTR_ICON)
 
-    async def _async_update_state(
-        self,
-    ):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    async def _async_update_state(self) -> None:  # noqa: PLR0912, PLR0915
         """Update the sensor state."""
         _LOGGER.debug('Updating sensor "%s"', self.name)
         start = end = start_ts = end_ts = None
@@ -451,7 +431,7 @@ class AverageSensor(SensorEntity):
         await self._async_update_period()
 
         if self._period is not None:
-            now = datetime.datetime.now()
+            now = dt_util.now()
             start, end = self._period
             if p_period is None:
                 p_start = p_end = now
@@ -485,7 +465,6 @@ class AverageSensor(SensorEntity):
         self.min_value = self.max_value = None
         last_values = []
 
-
         # pylint: disable=too-many-nested-blocks
         for entity_id in self.sources:
             _LOGGER.debug('Processing entity "%s"', entity_id)
@@ -501,7 +480,6 @@ class AverageSensor(SensorEntity):
             value = 0
             elapsed = 0
             trending_last_state = None
-
 
             if self._period is None:
                 # Get current state
@@ -569,7 +547,7 @@ class AverageSensor(SensorEntity):
             if isinstance(value, numbers.Number):
                 values.append(value)
                 self.available_sources += 1
-            
+
             if isinstance(trending_last_state, numbers.Number):
                 last_values.append(trending_last_state)
 
@@ -593,10 +571,13 @@ class AverageSensor(SensorEntity):
         else:
             self.trending_towards = None
 
-        _LOGGER.debug("Current trend: %s", self.trending_towards)
-
         _LOGGER.debug(
             "Total average state: %s %s",
             self._attr_native_value,
+            self._attr_native_unit_of_measurement,
+        )
+        _LOGGER.debug(
+            "Current trend: %s %s",
+            self.trending_towards,
             self._attr_native_unit_of_measurement,
         )

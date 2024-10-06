@@ -1,25 +1,18 @@
 """The test for the average sensor platform."""
+
 # pylint: disable=redefined-outer-name
 from __future__ import annotations
 
+import logging
 from asyncio import sleep
 from datetime import timedelta
-import logging
 from unittest.mock import MagicMock, patch
 
+import homeassistant.util.dt as dt_util
 import pytest
-from pytest import raises
-from pytest_homeassistant_custom_component.common import assert_setup_component
-from voluptuous import Invalid
-
-from custom_components.average.const import CONF_DURATION, CONF_END, CONF_START, DOMAIN
-from custom_components.average.sensor import (
-    AverageSensor,
-    async_setup_platform,
-    check_period_keys,
-)
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
-from homeassistant.components.sensor import DOMAIN as SENSOR, SensorDeviceClass
+from homeassistant.components.sensor import DOMAIN as SENSOR
+from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.components.water_heater import DOMAIN as WATER_HEATER_DOMAIN
 from homeassistant.components.weather import DOMAIN as WEATHER_DOMAIN
 from homeassistant.const import (
@@ -29,6 +22,7 @@ from homeassistant.const import (
     CONF_ENTITIES,
     CONF_NAME,
     CONF_PLATFORM,
+    CONF_UNIQUE_ID,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfTemperature,
@@ -36,28 +30,45 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.template import Template
 from homeassistant.setup import async_setup_component
-import homeassistant.util.dt as dt_util
 from homeassistant.util.unit_system import TEMPERATURE_UNITS
+from pytest_homeassistant_custom_component.common import assert_setup_component
+from voluptuous import Invalid
+
+from custom_components.average.const import (
+    CONF_DURATION,
+    CONF_END,
+    CONF_PRECISION,
+    CONF_START,
+    DOMAIN,
+)
+from custom_components.average.sensor import (
+    AverageSensor,
+    async_setup_platform,
+    check_period_keys,
+)
 
 from .const import TEST_ENTITY_IDS, TEST_NAME, TEST_UNIQUE_ID
 
 
-@pytest.fixture()
-def default_sensor(hass: HomeAssistant):
+@pytest.fixture
+def default_sensor_config():
+    """Return default test config for AverageSensor."""
+    return {
+        CONF_UNIQUE_ID: TEST_UNIQUE_ID,
+        CONF_NAME: TEST_NAME,
+        # CONF_START: None,
+        CONF_END: Template("{{ now() }}"),
+        CONF_DURATION: timedelta(minutes=3),
+        CONF_ENTITIES: TEST_ENTITY_IDS,
+        CONF_PRECISION: 2,
+        # CONF_PROCESS_UNDEF_AS: None,
+    }
+
+
+@pytest.fixture
+def default_sensor(hass: HomeAssistant, default_sensor_config):
     """Create an AverageSensor with default values."""
-    entity = AverageSensor(
-        hass,
-        TEST_UNIQUE_ID,
-        TEST_NAME,
-        None,
-        Template("{{ now() }}"),
-        timedelta(minutes=3),
-        TEST_ENTITY_IDS,
-        2,
-        None,
-    )
-    entity.hass = hass
-    return entity
+    return AverageSensor(hass, default_sensor_config)
 
 
 async def test_valid_check_period_keys(hass: HomeAssistant):
@@ -89,19 +100,19 @@ async def test_valid_check_period_keys(hass: HomeAssistant):
 
 async def test_invalid_check_period_keys(hass: HomeAssistant):
     """Test period keys check."""
-    with raises(Invalid):
+    with pytest.raises(Invalid):
         check_period_keys(
             {
                 CONF_END: 20,
             }
         )
-    with raises(Invalid):
+    with pytest.raises(Invalid):
         check_period_keys(
             {
                 CONF_START: 21,
             }
         )
-    with raises(Invalid):
+    with pytest.raises(Invalid):
         check_period_keys(
             {
                 CONF_START: 22,
@@ -127,7 +138,9 @@ async def test_setup_platform(hass: HomeAssistant):
     assert async_add_entities.called
 
 
-async def test_entity_initialization(hass: HomeAssistant, default_sensor):
+async def test_entity_initialization(
+    hass: HomeAssistant, default_sensor, default_sensor_config
+):
     """Test sensor initialization."""
     expected_attributes = {
         "available_sources": 0,
@@ -145,32 +158,16 @@ async def test_entity_initialization(hass: HomeAssistant, default_sensor):
     assert default_sensor.icon is None
     assert default_sensor.extra_state_attributes == expected_attributes
 
-    entity = AverageSensor(
-        hass,
-        None,
-        TEST_NAME,
-        None,
-        Template("{{ now() }}"),
-        timedelta(minutes=3),
-        TEST_ENTITY_IDS,
-        2,
-        None,
-    )
-
+    config = default_sensor_config.copy()
+    config[CONF_UNIQUE_ID] = None
+    entity = AverageSensor(hass, config)
+    #
     assert entity.unique_id is None
 
-    entity = AverageSensor(
-        hass,
-        "__legacy__",
-        TEST_NAME,
-        None,
-        Template("{{ now() }}"),
-        timedelta(minutes=3),
-        TEST_ENTITY_IDS,
-        2,
-        None,
-    )
-
+    config = default_sensor_config.copy()
+    config[CONF_UNIQUE_ID] = "__legacy__"
+    entity = AverageSensor(hass, config)
+    #
     assert entity.unique_id in (
         "2ef66732fb7155dce84ad53afe910beba59cfad4",
         "ca6b83d00637cf7d1e2f5c30b4f4f0402ad2fc53",
@@ -429,5 +426,4 @@ async def test_update(default_sensor):
 # pylint: disable=protected-access
 async def test__update_period(default_sensor):
     """Test period updater."""
-    # default_sensor._update_period()
-    # todo; pylint: disable=fixme
+    # TODO(Limych): ;   #noqa: TD003
