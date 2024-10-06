@@ -1,4 +1,4 @@
-#  Copyright (c) 2019-2022, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
+#  Copyright (c) 2019-2024, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
 #  Creative Commons BY-NC-SA 4.0 International Public License
 #  (see LICENSE.md or https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
@@ -8,6 +8,7 @@ The Average Sensor.
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-average/
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,9 +22,10 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
     from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
+from _sha1 import sha1
+
 import homeassistant.util.dt as dt_util
 import voluptuous as vol
-from _sha1 import sha1
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.components.recorder import get_instance, history
 from homeassistant.components.sensor import (
@@ -91,8 +93,7 @@ def check_period_keys(conf: ConfigType) -> ConfigType:
         raise vol.Invalid(
             "You must provide none, only "
             + CONF_DURATION
-            + " or maximum 2 of the following: "
-            ", ".join(CONF_PERIOD_KEYS)
+            + " or maximum 2 of the following: " ", ".join(CONF_PERIOD_KEYS)
         )
     return conf
 
