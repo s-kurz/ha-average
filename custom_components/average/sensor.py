@@ -15,8 +15,6 @@ import math
 import numbers
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.helpers.group import expand_entity_ids
-
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -57,6 +55,7 @@ from homeassistant.exceptions import TemplateError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.config_validation import PLATFORM_SCHEMA
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.group import expand_entity_ids
 from homeassistant.util import Throttle
 from homeassistant.util.unit_conversion import TemperatureConverter
 from homeassistant.util.unit_system import TEMPERATURE_UNITS
