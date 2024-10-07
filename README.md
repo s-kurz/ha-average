@@ -179,11 +179,17 @@ I put a lot of work into making this repo and component available and updated to
 **count**:\
   Total count of processed values of source sensors.
 
-**min**:\
+**min_value**:\
   Minimum value of processed values of source sensors.
 
-**max**:\
+**min_datetime**:\
+  Date and time of minimum value of processed values of source sensors (if period was set).
+
+**max_value**:\
   Maximum value of processed values of source sensors.
+
+**max_datetime**:\
+  Date and time of maximum value of processed values of source sensors (if period was set).
 
 **trending_towards**:\
   The predicted value if monitored entities keep their current states for the remainder of the period. Requires "end" configuration variable to be set to actual end of period and not now().
