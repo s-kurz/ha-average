@@ -542,7 +542,10 @@ class AverageSensor(SensorEntity):
 
                 # Count time elapsed between last history state and now
                 if last_state is None:
-                    value = None
+                    if elapsed:
+                        value /= elapsed
+                    else:
+                        value = None
                 else:
                     last_elapsed = end_ts - last_time
                     value += last_state * last_elapsed
